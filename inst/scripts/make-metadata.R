@@ -7,13 +7,13 @@ meta <- data.frame(
           "mouse gene - human disease association data, and ",
           "mouse phenotype - human disease association data"
       ),
-      BiocVersion = "3.17",
+      BiocVersion = "3.19",
       Genome = NA,
       SourceType = "Multiple",
       SourceUrl = paste("http://www.informatics.jax.org/downloads/reports/index.html#pheno", 
           "http://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/",
           sep = ","),
-      SourceVersion = "1.2",
+      SourceVersion = "2",
       Species = NA,
       TaxonomyId = NA,
       Coordinate_1_based = TRUE,
@@ -26,6 +26,6 @@ meta <- data.frame(
       ResourceName = "MPO.sqlite",
       Tags = "Annotation"
 )
-write.csv(meta, file="inst/extdata/metadata.csv", row.names=FALSE)
+write.csv(meta, file="inst/extdata/metadata_v2.csv", row.names=FALSE)
 
 

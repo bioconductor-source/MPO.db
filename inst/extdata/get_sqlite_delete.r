@@ -1,9 +1,10 @@
-setwd("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725")
-packagedir <- getwd()
+setwd("E:\\南方医科大学\\DOSE新paper\\MGI")
+packagedir <- "E:\\enrichplot_export\\MPO.db"
 sqlite_path <- paste(packagedir, sep=.Platform$file.sep, "inst", "extdata")
 if(!dir.exists(sqlite_path)){dir.create(sqlite_path,recursive = TRUE)}
 dbfile <- file.path(sqlite_path, "MPO.sqlite")
 unlink(dbfile)
+
 ###################################################
 ### create database
 ###################################################
@@ -12,32 +13,42 @@ library(RSQLite)
 drv <- dbDriver("SQLite")
 db <- dbConnect(drv, dbname=dbfile)
 ## dbDisconnect(db)
-obo <- ontologyIndex::get_ontology("MPheno_OBO.ontology", extract_tags = "everything")
-# MPOTERM
-MPOTERM <- data.frame(mpid = names(obo$name), term = obo$name)
-## 筛选掉is_obsolete
-not_obsolete <- names(obo$obsolete)[obo$obsolete == FALSE] |> intersect(MPOTERM$mpid)
-# just keep MPO:
-not_obsolete <- grep("^MP:", not_obsolete, value = TRUE)
-MPOTERM <- MPOTERM[MPOTERM[, 1] %in% not_obsolete, ]
-colnames(MPOTERM) <- c("mpid", "term")
+
+source("E:\\enrichplot_export\\MPO.db\\inst\\extdata\\parse-obo.R")
+library(dplyr)
+## DOTERM
+mpobo <- parse_mp("MPheno_OBO.ontology")
+mpterm <- mpobo$mpinfo[, c(1,2)]
+colnames(mpterm) <- c("mpid", "term")
+MPOTERM <- mpterm
+MPOTERM <- na.omit(MPOTERM)
+MPOTERM <- MPOTERM[MPOTERM[, 1] != "", ]
+MPOTERM <- MPOTERM[MPOTERM[, 2] != "", ]
 dbWriteTable(conn = db, "mp_term", MPOTERM, row.names=FALSE, overwrite = TRUE)
 
 
-# ALIAS 
-ALIAS <- stack(obo$alt_id)[, c(2, 1)]
-colnames(ALIAS) <- c("mpid", "alias")
-ALIAS <- ALIAS[ALIAS[, 1] %in% not_obsolete, ]
+## ALIAS
+alias <- mpobo$alias
+colnames(alias) <- c("mpid", "alias")
+ALIAS <- alias
+ALIAS <- na.omit(ALIAS)
+ALIAS <- ALIAS[ALIAS[, 1] != "", ]
+ALIAS <- ALIAS[ALIAS[, 2] != "", ]
 dbWriteTable(conn = db, "mp_alias", ALIAS, row.names=FALSE, overwrite = TRUE)
-# SYNONYM
-SYNONYM <- stack(obo$synonym)[, c(2, 1)]
-colnames(SYNONYM) <- c("mpid", "synonym")
-SYNONYM <- SYNONYM[SYNONYM[, 1] %in% not_obsolete, ]
+
+## SYNONYM
+synonym <- mpobo$synonym
+colnames(synonym) <- c("mpid", "synonym")
+SYNONYM <- synonym
+SYNONYM <- na.omit(SYNONYM)
+SYNONYM <- SYNONYM[SYNONYM[, 1] != "", ]
+SYNONYM <- SYNONYM[SYNONYM[, 2] != "", ]
 dbWriteTable(conn = db, "mp_synonym", SYNONYM, row.names=FALSE, overwrite = TRUE)
+
 
 ## Developmental Anatomy
 library(data.table)
-tissue <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MP_EMAPA.rpt", header = FALSE)
+tissue <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MP_EMAPA.rpt", header = FALSE)
 class(tissue) <- "data.frame"
 tissue <- tissue[, c(1,4)]
 colnames(tissue) <- c("mpid", "anatomy")
@@ -47,36 +58,66 @@ ANATOMY <- ANATOMY[ANATOMY[, 1] != "", ]
 ANATOMY <- ANATOMY[ANATOMY[, 2] != "", ]
 dbWriteTable(conn = db, "mp_anatomy", ANATOMY, row.names=FALSE, overwrite = TRUE)
 
-# MPOPARENTS
-## 跟gcy相比，我这个删去了mpid:4_NA。
-MPOPARENTS <- stack(obo$parents)[, c(2, 1)]
+
+## DOPARENTS
+MPOPARENTS <- mpobo$rel
 colnames(MPOPARENTS) <- c("mpid", "parent")
-MPOPARENTS <- MPOPARENTS[MPOPARENTS[, 1] %in% not_obsolete, ]
+MPOPARENTS <- na.omit(MPOPARENTS)
+MPOPARENTS <- MPOPARENTS[MPOPARENTS[, 1] != "", ]
+MPOPARENTS <- MPOPARENTS[MPOPARENTS[, 2] != "", ]
 dbWriteTable(conn = db, "mp_parent", MPOPARENTS, row.names=FALSE)
 
 
-# MPOCHILDREN
-MPOCHILDREN <- stack(obo$children)[, c(2, 1)]
+## DOCHILDREN
+MPOCHILDREN <- mpobo$rel[, c(2,1)]
+MPOCHILDREN <- MPOCHILDREN[order(MPOCHILDREN[, 1]), ]
 colnames(MPOCHILDREN) <- c("mpid", "children")
-MPOCHILDREN <- MPOCHILDREN[MPOCHILDREN[, 1] %in% not_obsolete, ]
+MPOCHILDREN <- na.omit(MPOCHILDREN)
+MPOCHILDREN <- MPOCHILDREN[MPOCHILDREN[, 1] != "", ]
+MPOCHILDREN <- MPOCHILDREN[MPOCHILDREN[, 2] != "", ]
 dbWriteTable(conn = db, "mp_children", MPOCHILDREN, row.names=FALSE)
-# MPOANCESTOR
-MPOANCESTOR <- stack(obo$ancestors)[, c(2, 1)]
-MPOANCESTOR <- MPOANCESTOR[MPOANCESTOR[, 1] != MPOANCESTOR[, 2], ]
-colnames(MPOANCESTOR) <- c("mpid", "ancestor")
-MPOANCESTOR <- MPOANCESTOR[MPOANCESTOR[, 1] %in% not_obsolete, ]
-dbWriteTable(conn = db, "mp_ancestor", MPOANCESTOR, row.names=FALSE)
-# MPOOFFSPRING
-MPOOFFSPRING <- MPOANCESTOR[, c(2, 1)]
-colnames(MPOOFFSPRING) <- c("mpid", "offspring")
-MPOOFFSPRING <- MPOOFFSPRING[MPOOFFSPRING[, 1] %in% not_obsolete, ]
-dbWriteTable(conn = db, "mp_offspring", MPOOFFSPRING, row.names=FALSE)
 
+## DOANCESTOR
+ancestor_list <- split(MPOPARENTS[, 2], MPOPARENTS[, 1])
+getAncestor <- function(id) {
+    ans_temp <- which(MPOPARENTS[, 1] %in% ancestor_list[[id]])
+    ids <- MPOPARENTS[ans_temp, 2]
+    content <- c(ancestor_list[[id]], ids)
+    while(!all(is.na(ids))) {
+        ans_temp <- which(MPOPARENTS[, 1] %in% ids)
+        ids <- MPOPARENTS[ans_temp, 2]
+        content <- c(content, ids)
+    }
+    content[!is.na(content)]
+}
+
+for (id in names(ancestor_list)) {
+    ancestor_list[[id]] <- getAncestor(id)
+}
+ancestordf <- stack(ancestor_list)[, c(2, 1)]
+ancestordf[, 1] <- as.character(ancestordf[, 1])
+ancestordf <- unique(ancestordf)
+MPOANCESTOR <- ancestordf
+colnames(MPOANCESTOR) <- c("mpid", "ancestor")
+MPOANCESTOR <- na.omit(MPOANCESTOR)
+MPOANCESTOR <- MPOANCESTOR[MPOANCESTOR[, 1] != "", ]
+MPOANCESTOR <- MPOANCESTOR[MPOANCESTOR[, 2] != "", ]
+dbWriteTable(conn = db, "mp_ancestor", MPOANCESTOR, row.names=FALSE)
+
+
+# DOOFFSPRING
+MPOOFFSPRING <- ancestordf[, c(2, 1)]
+MPOOFFSPRING <- MPOOFFSPRING[order(MPOOFFSPRING[, 1]), ]
+colnames(MPOOFFSPRING) <- c("mpid", "offspring")
+MPOOFFSPRING <- na.omit(MPOOFFSPRING)
+MPOOFFSPRING <- MPOOFFSPRING[MPOOFFSPRING[, 1] != "", ]
+MPOOFFSPRING <- MPOOFFSPRING[MPOOFFSPRING[, 2] != "", ]
+dbWriteTable(conn = db, "mp_offspring", MPOOFFSPRING, row.names=FALSE)
 
 # gene2MP
 library(clusterProfiler)
 library(org.Mm.eg.db)
-HMD_HumanPhenotype <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\HMD_HumanPhenotype.rpt", sep = "\t")
+HMD_HumanPhenotype <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\HMD_HumanPhenotype.rpt", sep = "\t")
 class(HMD_HumanPhenotype) <- "data.frame"
 gene_mp <- HMD_HumanPhenotype[, c(4, 5)]
 gene_mp <- gene_mp[gene_mp[, 2] != "", ]
@@ -85,7 +126,7 @@ aa <- rep(gene_mp[, 1], times = unlist(lapply(bb, length)))
 gene_mp <- data.frame(`MGI` = aa, MP = unlist(bb))
 gene_mp <- unique(gene_mp)
 
-MGI_GenePheno <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_GenePheno.rpt", sep = "\t")
+MGI_GenePheno <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_GenePheno.rpt", sep = "\t")
 class(MGI_GenePheno) <- "data.frame"
 colnames(MGI_GenePheno) <- c("Allelic Composition", "Allelic Composition", "Allele ID(s)", 
     "Genetic Background", "Mammalian Phenotype ID", "PubMed ID", "MGI Marker Accession ID", "MGI Genotype Accession ID")
@@ -93,13 +134,13 @@ MGI_GenePheno <- MGI_GenePheno[, c("MGI Marker Accession ID", "Mammalian Phenoty
 colnames(MGI_GenePheno) <- c("MGI", "MP")
 
 
-MGI_Geno_DiseaseDO <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_Geno_DiseaseDO.rpt", sep = "\t")
+MGI_Geno_DiseaseDO <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_Geno_DiseaseDO.rpt", sep = "\t")
 class(MGI_Geno_DiseaseDO) <- "data.frame"
 MGI_Geno_DiseaseDO <- MGI_Geno_DiseaseDO[, c(7, 5)]
 colnames(MGI_Geno_DiseaseDO) <- c("MGI", "MP")
 
 
-MGI_PhenotypicAllele <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_PhenotypicAllele.rpt", sep = "\t", quote = "", header = FALSE)
+MGI_PhenotypicAllele <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_PhenotypicAllele.rpt", sep = "\t")
 class(MGI_PhenotypicAllele) <- "data.frame"
 MGI_PhenotypicAllele <- MGI_PhenotypicAllele[, c(7, 11)]
 MGI_PhenotypicAllele <- MGI_PhenotypicAllele[MGI_PhenotypicAllele[, 2] != "", ]
@@ -109,22 +150,22 @@ MGI_PhenotypicAllele <- data.frame(MGI = aa, MP = unlist(bb))
 MGI_PhenotypicAllele <- unique(MGI_PhenotypicAllele)
 
 
-MGI_Geno_NotDiseaseDO <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_Geno_NotDiseaseDO.rpt", sep = "\t")
+MGI_Geno_NotDiseaseDO <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_Geno_NotDiseaseDO.rpt", sep = "\t")
 class(MGI_Geno_NotDiseaseDO) <- "data.frame"
 MGI_Geno_NotDiseaseDO <- MGI_Geno_NotDiseaseDO[, c(7, 5)]
 colnames(MGI_Geno_NotDiseaseDO) <- c("MGI", "MP")
 
 
-MGI_Pheno_Sex <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_Pheno_Sex.rpt", sep = "\t")
+MGI_Pheno_Sex <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_Pheno_Sex.rpt", sep = "\t")
 class(MGI_Pheno_Sex) <- "data.frame"
 MGI_Pheno_Sex <- MGI_Pheno_Sex[, c(1, 3)]
 colnames(MGI_Pheno_Sex) <- c("MGI", "MP")
 
-## data from http://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/latest/results/
+## data from http://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/release-18.0/results/
 ## (https://www.mousephenotype.org/)
 
 
-impc <- read.csv("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\IMPC\\genotype-phenotype-assertions-ALL.csv")
+impc <- read.csv("E:\\南方医科大学\\DOSE新paper\\IMPC\\genotype-phenotype-assertions-ALL.csv")
 impc <- impc[,c("marker_accession_id", "mp_term_id")]
 colnames(impc) <- c("MGI", "MP")
 
@@ -135,7 +176,7 @@ mp_mgi <- do.call(rbind,list(gene_mp, MGI_GenePheno, MGI_Geno_DiseaseDO, MGI_Phe
 mp_mgi <- unique(mp_mgi)
 
 # convert MGI id
-MGI_GenePheno <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_GenePheno.rpt", sep = "\t")
+MGI_GenePheno <- fread("MGI_GenePheno.rpt", sep = "\t")
 class(MGI_GenePheno) <- "data.frame"
 colnames(MGI_GenePheno) <- c("Allelic Composition", "Allelic Composition", "Allele ID(s)", 
     "Genetic Background", "Mammalian Phenotype ID", "PubMed ID", "MGI Marker Accession ID", "MGI Genotype Accession ID")
@@ -193,28 +234,32 @@ mgi2do <- inner_join(MPOMPMGI, MP2DO, "mpid")
 mgi2do <- unique(mgi2do[, c(2, 3)])
 
 # gene2DO
-MGI_DO <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_DO.rpt", sep = "\t")
+MGI_DO <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_DO.rpt", sep = "\t")
 class(MGI_DO) <- "data.frame"
 MGI_DO <- MGI_DO[MGI_DO$`Common Organism Name` == "mouse, laboratory", ]
 MGI_DO <- MGI_DO[, c(8, 1)]
 colnames(MGI_DO) <- c("MGI", "DO")
 
 
-MGI_Geno_DiseaseDO <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_Geno_DiseaseDO.rpt", sep = "\t")
+MGI_Geno_DiseaseDO <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_Geno_DiseaseDO.rpt", sep = "\t")
 class(MGI_Geno_DiseaseDO) <- "data.frame"
 MGI_Geno_DiseaseDO <- MGI_Geno_DiseaseDO[, c(7, 8)]
 colnames(MGI_Geno_DiseaseDO) <- c("MGI", "DO")
 
 
-MGI_Geno_NotDiseaseDO <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_Geno_NotDiseaseDO.rpt", sep = "\t")
+MGI_Geno_NotDiseaseDO <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_Geno_NotDiseaseDO.rpt", sep = "\t")
 class(MGI_Geno_NotDiseaseDO) <- "data.frame"
 MGI_Geno_NotDiseaseDO <- MGI_Geno_NotDiseaseDO[, c(7, 8)]
 colnames(MGI_Geno_NotDiseaseDO) <- c("MGI", "DO")
 
 
+# do <- fread("E:\\南方医科大学\\DOSE新paper\\DISEASE-ALLIANCE_COMBINED.tsv", sep = "\t")
+# class(do) <- "data.frame"
+# do_m <- do[do$Source == "MGI", ]
+# do_m <- do_m[, c("DBObjectID", "DOID")]
+# colnames(do_m) <- c("MGI", "DO")
 
-# download from https://www.alliancegenome.org/downloads -> Mus musculus associations
-do <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\DISEASE-ALLIANCE_MGI.tsv", sep = "\t")
+do <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\DISEASE-ALLIANCE_MGI.tsv", sep = "\t")
 class(do) <- "data.frame"
 do_m <- do[do$Source == "MGI", ]
 do_m <- do_m[, c("DBObjectID", "DOID")]
@@ -232,7 +277,7 @@ kk <- gsub("^\\w+:", "", kk)
 gene2DO1 <- gene2DO[gene2DO[, 1] %in% kk, ] 
 gene2DO_fail <- gene2DO[!(gene2DO[, 1] %in% kk), ] 
 
-MGI_GenePheno <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\MGI\\MGI_GenePheno.rpt", sep = "\t")
+MGI_GenePheno <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\MGI_GenePheno.rpt", sep = "\t")
 class(MGI_GenePheno) <- "data.frame"
 colnames(MGI_GenePheno) <- c("Allelic Composition", "Allelic Composition", "Allele ID(s)", 
     "Genetic Background", "Mammalian Phenotype ID", "PubMed ID", "MGI Marker Accession ID", "MGI Genotype Accession ID")
@@ -270,7 +315,7 @@ MPOMGIDO <- unique(rbind(MPOMGIDO, mgi2do))
 dbWriteTable(conn = db, "mgi_doid", MPOMGIDO, row.names=FALSE, overwrite = TRUE)
 
 # mp2do
-source("E:\\enrichplot_export\\MPO.db\\inst\\extdata\\MP_HP_map.r")
+source("MP_HP_map.r")
 colnames(MP2DO) <- c("mpid", "doid")
 MPOMPDO <- unique(MP2DO)
 MPOMPDO <- na.omit(MPOMPDO)

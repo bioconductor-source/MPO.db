@@ -1,4 +1,4 @@
-setwd("E:\\南方医科大学\\DOSE新paper\\mh_mapping_initiative-master\\mh_mapping_initiative-master")
+setwd("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\mh_mapping_initiative-master")
 library(data.table)
 ## HP2DO
 file1 <- fread("mappings\\hp_doid_pistoia.sssom.tsv", sep = "\t")
@@ -6,19 +6,22 @@ class(file1) <- "data.frame"
 file1 <- file1[, c(1, 3)]
 colnames(file1) <- c("HP", "DOID")
 # HP2OMIM 迂回到DO
-phenotype <- fread("E:\\南方医科大学\\DOSE新paper\\MGI\\phenotype.hpoa", sep = "\t", header = TRUE)
+# download from http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa
+phenotype <- fread("E:\\enrichplot_export\\DOSE数据更新\\MPO.db数据更新_20240725\\phenotype.hpoa", sep = "\t", header = TRUE)
 class(phenotype) <- "data.frame"
 phenotype <- phenotype[, c(4, 5)]
 colnames(phenotype) <- c("HP", "OMIM")
 
 # OMIM2DO
+# download from https://github.com/DiseaseOntology/HumanDiseaseOntology
+# this file has been deleted
 xrefs <- fread("E:\\南方医科大学\\DOSE新paper\\HumanDiseaseOntology-main\\src\\DOreports\\xrefs_in_DO.tsv", sep = "\t", header = TRUE)
 class(xrefs) <- "data.frame"
 xrefs <- unique(xrefs[grep("OMIM", xrefs[, 3]), c(1, 3)])
 colnames(xrefs) <- c("DOID", "OMIM")
 
 library(dplyr)
-HP2DO <- inner_join(phenotype, xrefs, "OMIM")
+HP2DO <- inner_join(phenotype, xrefs, "OMIM", relationship = "many-to-many")
 HP2DO <- unique(HP2DO[, c(1, 3)])
 
 # aa <- unique(paste(file1[, 1], file1[,2], sep = "_"))
@@ -40,7 +43,7 @@ mp_hp_hwt_impc <- fread("mappings\\mp_hp_hwt_impc.sssom.tsv", sep = "\t", header
 class(mp_hp_hwt_impc) <- "data.frame"
 mp_hp_hwt_impc <- mp_hp_hwt_impc[, c(1,4)]
 
-mp_hp_mgi_all <- fread("mappings\\mp_hp_mgi_all.sssom.tsv", sep = "\t", header = TRUE)
+mp_hp_mgi_all <- read.table("mappings\\mp_hp_mgi_all.sssom.tsv", sep = "\t", header = TRUE, fill = TRUE, quote = "")
 class(mp_hp_mgi_all) <- "data.frame"
 mp_hp_mgi_all <- mp_hp_mgi_all[, c(5,1)]
 
@@ -72,7 +75,7 @@ class(mp_doid_pistoia) <- "data.frame"
 mp_doid_pistoia <- mp_doid_pistoia[, c(1, 3)]
 colnames(mp_doid_pistoia) <- c("MP", "DOID")
 
-MP2DO <- inner_join(mp2hp, HP2DO, "HP")
+MP2DO <- inner_join(mp2hp, HP2DO, "HP", relationship = "many-to-many")
 MP2DO <- unique(MP2DO[, c(1, 3)])
 
 MP2DO <- rbind(MP2DO, mp_doid_pistoia)
