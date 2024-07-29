@@ -22,7 +22,7 @@ meta <- data.frame(
       RDataClass = "SQLite",
       # DispatchClass = "SQLiteFile",
       DispatchClass = "FilePath",
-      RDataPath = "MPO.db/MPO.sqlite",
+      RDataPath = "MPO.db/V2/MPO.sqlite",
       ResourceName = "MPO.sqlite",
       Tags = "Annotation"
 )

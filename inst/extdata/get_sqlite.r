@@ -332,10 +332,10 @@ dbWriteTable(conn = db, "mp_doid", MPOMPDO, row.names=FALSE)
 
 
 metadata <-rbind(c("DBSCHEMA","MPO_DB"),
-        c("DBSCHEMAVERSION","1.0"),
+        c("DBSCHEMAVERSION","2.0"),
         c("MPOSOURCENAME","MGI"),
         c("MPOSOURCURL","http://www.informatics.jax.org/downloads/reports/index.html#pheno"),
-        c("MPOSOURCEDATE","20230302"),
+        c("MPOSOURCEDATE","20240725"),
         c("Db type", "MPODb"))
 
 
@@ -361,11 +361,11 @@ dbListFields(conn = db, "metadata")
 dbReadTable(conn = db,"metadata")
 
 
-map.metadata <- rbind(c("TERM", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20230302"),
-            c("CHILDREN", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20230302"),
-            c("PARENTS", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20230302"),
-            c("ANCESTOR", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20230302"),
-            c("OFFSPRING", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20230302"))	
+map.metadata <- rbind(c("TERM", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20240725"),
+            c("CHILDREN", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20240725"),
+            c("PARENTS", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20240725"),
+            c("ANCESTOR", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20240725"),
+            c("OFFSPRING", "Mouse Phenotype Ontology", "http://www.informatics.jax.org/downloads/reports/index.html#pheno","20240725"))	
 map.metadata <- as.data.frame(map.metadata)
 colnames(map.metadata) <- c("map_name","source_name","source_url","source_date")
 dbWriteTable(conn = db, "map_metadata", map.metadata, row.names=FALSE, overwrite = TRUE)
