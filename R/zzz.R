@@ -1,6 +1,7 @@
 make_MPO.db <- function() {
     ah <- suppressMessages(AnnotationHub())
-    dbfile <- ah[["AH111553", verbose=FALSE]]  
+    # dbfile <- ah[["AH111553", verbose=FALSE]] 
+    dbfile <- ah[["AH117057", verbose=FALSE]]   
     conn <- AnnotationDbi::dbFileConnect(dbfile)
     db <- new("MPODb", conn=conn)
     db
@@ -19,7 +20,7 @@ MPO_dbInfo <- function() dbInfo(datacache)
     makeCachedActiveBinding("MPO.db", make_MPO.db, env=ns)
     namespaceExport(ns, "MPO.db")
     ah <- suppressMessages(AnnotationHub())
-    dbfile <- ah[["AH111553", verbose=FALSE]]  
+    dbfile <- ah[["AH117057", verbose=FALSE]]  
     dbconn <- AnnotationDbi::dbFileConnect(dbfile)
     assign("dbconn", dbconn, envir=datacache)
     ann_objs <- createAnnObjs.MPO_DB("MPO", "MPO", dbconn, datacache)
